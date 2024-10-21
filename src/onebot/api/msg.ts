@@ -34,7 +34,8 @@ import { RequestUtil } from '@/common/request';
 import fs from 'node:fs';
 import fsPromise from 'node:fs/promises';
 import { OB11FriendAddNoticeEvent } from '@/onebot/event/notice/OB11FriendAddNoticeEvent';
-import { decodeSysMessage } from '@/core/proto/ProfileLike';
+import { decodeSysMessage } from '@/core/packet/proto/old/ProfileLike';
+import { ForwardMsgBuilder } from "@/common/forward-msg-builder";
 
 type RawToOb11Converters = {
     [Key in keyof MessageElement as Key extends `${string}Element` ? Key : never]: (
@@ -108,10 +109,11 @@ export class OneBotMsgApi {
                     peerUid: msg.peerUid,
                     guildId: '',
                 };
-                const encodedFileId = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "." + element.fileName);
+                const encodedFileId = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid, "." + element.fileName);
                 return {
                     type: OB11MessageDataType.image,
                     data: {
+                        summary: element.summary,
                         file: encodedFileId,
                         sub_type: element.picSubType,
                         file_id: encodedFileId,
@@ -139,7 +141,7 @@ export class OneBotMsgApi {
                     file: element.fileName,
                     path: element.filePath,
                     url: pathToFileURL(element.filePath).href,
-                    file_id: FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "." + element.fileName),
+                    file_id: FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid,"." + element.fileName),
                     file_size: element.fileSize,
                     file_unique: element.fileName,
                 },
@@ -166,7 +168,7 @@ export class OneBotMsgApi {
                 return {
                     type: OB11MessageDataType.face,
                     data: {
-                        id: element.faceIndex.toString(),
+                        id: element.faceIndex.toString()
                     },
                 };
             }
@@ -184,8 +186,9 @@ export class OneBotMsgApi {
             return {
                 type: OB11MessageDataType.image,
                 data: {
+                    summary: _.faceName, // 商城表情名称
                     file: 'marketface',
-                    file_id: FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "." + _.key + ".jpg"),
+                    file_id: FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "", "." + _.key + ".jpg"),
                     path: url,
                     url: url,
                     file_unique: _.key
@@ -273,7 +276,7 @@ export class OneBotMsgApi {
             if (!videoDownUrl) {
                 videoDownUrl = element.filePath;
             }
-            const fileCode = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "." + element.fileName);
+            const fileCode = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "", "." + element.fileName);
             return {
                 type: OB11MessageDataType.video,
                 data: {
@@ -293,7 +296,7 @@ export class OneBotMsgApi {
                 peerUid: msg.peerUid,
                 guildId: '',
             };
-            const fileCode = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "." + element.fileName);
+            const fileCode = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "", "." + element.fileName);
             return {
                 type: OB11MessageDataType.voice,
                 data: {
@@ -495,8 +498,7 @@ export class OneBotMsgApi {
                 const uri2LocalRes = await uri2local(this.core.NapCatTempPath, thumb);
                 if (uri2LocalRes.success) thumb = uri2LocalRes.path;
             }
-            const videoEle = await this.core.apis.FileApi.createValidSendVideoElement(context, path, fileName, thumb);
-            return videoEle;
+            return await this.core.apis.FileApi.createValidSendVideoElement(context, path, fileName, thumb);
         },
 
         [OB11MessageDataType.voice]: async (sendMsg, context) =>
@@ -599,7 +601,13 @@ export class OneBotMsgApi {
 
         [OB11MessageDataType.node]: async () => undefined,
 
-        [OB11MessageDataType.forward]: async () => undefined,
+        [OB11MessageDataType.forward]: async ({ data }, context) => {
+            const jsonData = ForwardMsgBuilder.fromResId(data.id);
+            return this.ob11ToRawConverters.json({
+                data: { data: JSON.stringify(jsonData) },
+                type: OB11MessageDataType.json
+            }, context);
+        },
 
         [OB11MessageDataType.xml]: async () => undefined,
 
@@ -694,8 +702,9 @@ export class OneBotMsgApi {
             resMsg.sub_type = 'group';
             const ret = await this.core.apis.MsgApi.getTempChatInfo(ChatType.KCHATTYPETEMPC2CFROMGROUP, msg.senderUid);
             if (ret.result === 0) {
+                const member = await this.core.apis.GroupApi.getGroupMember(msg.peerUin, msg.senderUin);
                 resMsg.group_id = parseInt(ret.tmpChatInfo!.groupCode);
-                resMsg.sender.nickname = ret.tmpChatInfo!.fromNick;
+                resMsg.sender.nickname = member?.nick ?? member?.cardName ?? '临时会话';
                 resMsg.temp_source = resMsg.group_id;
             } else {
                 resMsg.group_id = 284840486; //兜底数据

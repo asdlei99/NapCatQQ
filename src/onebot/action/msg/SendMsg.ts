@@ -9,11 +9,15 @@ import {
 import { ActionName, BaseCheckResult } from '@/onebot/action/types';
 import { decodeCQCode } from '@/onebot/cqcode';
 import { MessageUnique } from '@/common/message-unique';
-import { ChatType, ElementType, NapCatCore, Peer, RawMessage, SendMessageElement } from '@/core';
+import { ChatType, ElementType, NapCatCore, Peer, RawMessage, SendArkElement, SendMessageElement } from '@/core';
 import BaseAction from '../BaseAction';
+import { rawMsgWithSendMsg } from "@/core/packet/msg/converter";
+import { PacketMsg } from "@/core/packet/msg/message";
+import { ForwardMsgBuilder } from "@/common/forward-msg-builder";
 
 export interface ReturnDataType {
     message_id: number;
+    res_id?: string;
 }
 
 export enum ContextMode {
@@ -69,7 +73,7 @@ export async function createContext(core: NapCatCore, payload: OB11PostContext, 
         }
         return {
             chatType: ChatType.KCHATTYPEC2C,
-            peerUid: Uid!,
+            peerUid: Uid,
             guildId: '',
         };
     }
@@ -99,7 +103,8 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
         return { valid: true };
     }
 
-    async _handle(payload: OB11PostSendMsg): Promise<{ message_id: number }> {
+    async _handle(payload: OB11PostSendMsg): Promise<ReturnDataType> {
+        this.contextMode = ContextMode.Normal;
         if (payload.message_type === 'group') this.contextMode = ContextMode.Group;
         if (payload.message_type === 'private') this.contextMode = ContextMode.Private;
         const peer = await createContext(this.core, payload, this.contextMode);
@@ -110,17 +115,21 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
         );
 
         if (getSpecialMsgNum(payload, OB11MessageDataType.node)) {
-            const returnMsg = await this.handleForwardedNodes(peer, messages as OB11MessageNode[]);
-            if (returnMsg) {
+            const packetMode = this.core.apis.PacketApi.available;
+            const returnMsgAndResId = packetMode
+                ? await this.handleForwardedNodesPacket(peer, messages as OB11MessageNode[])
+                : await this.handleForwardedNodes(peer, messages as OB11MessageNode[]);
+            if (returnMsgAndResId.message) {
                 const msgShortId = MessageUnique.createUniqueMsgId({
                     guildId: '',
                     peerUid: peer.peerUid,
                     chatType: peer.chatType,
-                }, returnMsg!.msgId);
-                return { message_id: msgShortId! };
-            } else {
-                throw Error('发送转发消息失败');
+                }, (returnMsgAndResId.message)!.msgId);
+                return { message_id: msgShortId!, res_id: returnMsgAndResId.res_id };
+            } else if (returnMsgAndResId.res_id && !returnMsgAndResId.message) {
+                throw Error(`发送转发消息（res_id：${returnMsgAndResId.res_id} 失败`);
             }
+            throw Error('发送转发消息失败');
         } else {
             // if (getSpecialMsgNum(payload, OB11MessageDataType.music)) {
             //   const music: OB11MessageCustomMusic = messages[0] as OB11MessageCustomMusic;
@@ -136,7 +145,54 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
         return { message_id: returnMsg!.id! };
     }
 
-    private async handleForwardedNodes(destPeer: Peer, messageNodes: OB11MessageNode[]): Promise<RawMessage | null> {
+    // TODO: recursively handle forwarded nodes
+    private async handleForwardedNodesPacket(msgPeer: Peer, messageNodes: OB11MessageNode[]): Promise<{
+        message: RawMessage | null,
+        res_id?: string
+    }> {
+        const logger = this.core.context.logger;
+        const packetMsg: PacketMsg[] = [];
+        for (const node of messageNodes) {
+            if ((node.data.id && typeof node.data.content !== "string") || !node.data.id) {
+                const OB11Data = normalize(node.data.content);
+                const { sendElements } = await this.obContext.apis.MsgApi.createSendElements(OB11Data, msgPeer);
+                const packetMsgElements: rawMsgWithSendMsg = {
+                    senderUin: node.data.user_id ?? +this.core.selfInfo.uin,
+                    senderName: node.data.nickname,
+                    groupId: msgPeer.chatType === ChatType.KCHATTYPEGROUP ? +msgPeer.peerUid : undefined,
+                    time: Date.now(),
+                    msg: sendElements,
+                };
+                logger.logDebug(`handleForwardedNodesPacket 开始转换 ${JSON.stringify(packetMsgElements)}`);
+                const transformedMsg = this.core.apis.PacketApi.packetSession?.packer.packetConverter.rawMsgWithSendMsgToPacketMsg(packetMsgElements);
+                logger.logDebug(`handleForwardedNodesPacket 转换为 ${JSON.stringify(transformedMsg)}`);
+                packetMsg.push(transformedMsg!);
+            } else {
+                logger.logDebug(`handleForwardedNodesPacket 跳过元素 ${JSON.stringify(node)}`);
+            }
+        }
+        const resid = await this.core.apis.PacketApi.sendUploadForwardMsg(packetMsg, msgPeer.chatType === ChatType.KCHATTYPEGROUP ? +msgPeer.peerUid : 0);
+        const forwardJson = ForwardMsgBuilder.fromPacketMsg(resid, packetMsg);
+        const finallySendElements = {
+            elementType: ElementType.ARK,
+            elementId: "",
+            arkElement: {
+                bytesData: JSON.stringify(forwardJson),
+            },
+        } as SendArkElement;
+        let returnMsg: RawMessage | undefined;
+        try {
+            returnMsg = await this.obContext.apis.MsgApi.sendMsgWithOb11UniqueId(msgPeer, [finallySendElements], [], true).catch(_ => undefined);
+        } catch (e) {
+            logger.logWarn("发送伪造合并转发消息失败！", e);
+        }
+        return { message: returnMsg ?? null, res_id: resid };
+    }
+
+    private async handleForwardedNodes(destPeer: Peer, messageNodes: OB11MessageNode[]): Promise<{
+        message: RawMessage | null,
+        res_id?: string
+    }> {
         const selfPeer = {
             chatType: ChatType.KCHATTYPEC2C,
             peerUid: this.core.selfInfo.uid,
@@ -146,7 +202,7 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
         for (const messageNode of messageNodes) {
             const nodeId = messageNode.data.id;
             if (nodeId) {
-                //对Mgsid和OB11ID混用情况兜底
+                // 对Msgid和OB11ID混用情况兜底
                 const nodeMsg = MessageUnique.getMsgIdAndPeerByShortId(parseInt(nodeId)) || MessageUnique.getPeerByMsgId(nodeId);
                 if (!nodeMsg) {
                     logger.logError.bind(this.core.context.logger)('转发消息失败，未找到消息', nodeId);
@@ -166,15 +222,15 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
                         }
                         const nodeMsg = await this.handleForwardedNodes(selfPeer, OB11Data.filter(e => e.type === OB11MessageDataType.node));
                         if (nodeMsg) {
-                            nodeMsgIds.push(nodeMsg.msgId);
-                            MessageUnique.createUniqueMsgId(selfPeer, nodeMsg.msgId);
+                            nodeMsgIds.push(nodeMsg.message!.msgId);
+                            MessageUnique.createUniqueMsgId(selfPeer, nodeMsg.message!.msgId);
                         }
                         //完成子卡片生成跳过后续
                         continue;
                     }
                     const { sendElements } = await this.obContext.apis.MsgApi
                         .createSendElements(OB11Data, destPeer);
-                        
+
                     //拆分消息
 
                     const MixElement = sendElements.filter(
@@ -236,10 +292,14 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
         if (retMsgIds.length === 0) throw Error('转发消息失败，生成节点为空');
         try {
             logger.logDebug('开发转发', srcPeer, destPeer, retMsgIds);
-            return await this.core.apis.MsgApi.multiForwardMsg(srcPeer!, destPeer, retMsgIds);
+            return {
+                message: await this.core.apis.MsgApi.multiForwardMsg(srcPeer!, destPeer, retMsgIds)
+            };
         } catch (e) {
             logger.logError.bind(this.core.context.logger)('forward failed', e);
-            return null;
+            return {
+                message: null
+            };
         }
     }
 
