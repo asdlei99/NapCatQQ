@@ -4,6 +4,7 @@ import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { Mutex } from 'async-mutex';
 import { NapCatCore } from '@/core';
 import { LaanaDataWrapper, LaanaEventWrapper, LaanaMessage, LaanaServerSideHandshake_Result } from '@laana-proto/def';
+import { napCatVersion } from '@/common/version';
 
 export class LaanaWsServerAdapter implements ILaanaNetworkAdapter {
     wsServer: WebSocketServer;
@@ -48,6 +49,7 @@ export class LaanaWsServerAdapter implements ILaanaNetworkAdapter {
                                 oneofKind: 'serverSideHandshake',
                                 serverSideHandshake: {
                                     serverVersion: '',
+                                    serverName: `NapCatQQ-${napCatVersion}`,
                                     result: LaanaServerSideHandshake_Result.wrongToken,
                                 },
                             },
@@ -61,6 +63,7 @@ export class LaanaWsServerAdapter implements ILaanaNetworkAdapter {
                             oneofKind: 'serverSideHandshake',
                             serverSideHandshake: {
                                 serverVersion: '',
+                                serverName: `NapCatQQ-${napCatVersion}`,
                                 result: LaanaServerSideHandshake_Result.success,
                             },
                         },

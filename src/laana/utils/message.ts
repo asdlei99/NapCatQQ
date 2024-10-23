@@ -16,7 +16,7 @@ import {
     LaanaMessage_Bubble,
     LaanaPeer,
     LaanaPeer_Type,
-    OutgoingMessage,
+    LaanaOutgoingMessage,
 } from '@laana-proto/def';
 import faceConfig from '@/core/external/face_config.json';
 import { MessageContext } from '@/onebot/api';
@@ -27,7 +27,7 @@ export type SentMessageFileCacheRecord = {
 };
 
 type Laana2RawConverters = {
-    [key in Exclude<OutgoingMessage['content']['oneofKind'], undefined>]:
+    [key in Exclude<LaanaOutgoingMessage['content']['oneofKind'], undefined>]:
     (
         // eslint-disable-next-line
         // @ts-ignore
@@ -268,6 +268,10 @@ export class LaanaMessageUtils {
             };
         },
 
+        forwardedMessage: async msgContent => {
+            throw Error('Unimplemented');
+        },
+
         musicCard: () => { throw Error('Unimplemented'); },
     };
 
@@ -297,7 +301,7 @@ export class LaanaMessageUtils {
         };
     }
 
-    async laanaMessageToRaw(msg: OutgoingMessage, targetPeer: LaanaPeer) {
+    async laanaMessageToRaw(msg: LaanaOutgoingMessage, targetPeer: LaanaPeer) {
         if (!msg.content.oneofKind) {
             throw Error('消息内容类型未知');
         }

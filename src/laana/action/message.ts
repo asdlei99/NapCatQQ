@@ -2,7 +2,7 @@ import { NapCatLaanaAdapter } from '..';
 import { NapCatCore } from '@/core';
 import { LaanaActionHandler } from '../action';
 import fs from 'fs';
-import { ForwardMessagePing_Operation, LaanaPeer, OutgoingMessage } from '@laana-proto/def';
+import { ForwardMessagePing_Operation, LaanaPeer, LaanaOutgoingMessage } from '@laana-proto/def';
 
 export class LaanaMessageActionImpl {
     constructor(
@@ -68,7 +68,7 @@ export class LaanaMessageActionImpl {
      * @param targetPeer The peer to send the message to.
      * @returns The Laana-styled msgId of the message sent.
      */
-    async sendMessage(msg: OutgoingMessage, targetPeer: LaanaPeer) {
+    async sendMessage(msg: LaanaOutgoingMessage, targetPeer: LaanaPeer) {
         const { elements, fileCacheRecords } = await this.laana.utils.msg.laanaMessageToRaw(msg, targetPeer);
 
         let cacheSize = 0;
