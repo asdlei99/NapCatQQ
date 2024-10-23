@@ -8,6 +8,7 @@ import { LaanaConfigLoader } from './config';
 import { LaanaNetworkManager } from './network';
 import { LaanaWsServerAdapter } from './network/ws-server';
 import { LaanaContactActionImpl } from '@/laana/action/contact';
+import { LaanaGroupActionImpl } from '@/laana/action/group';
 
 export class NapCatLaanaAdapter {
     utils = {
@@ -26,6 +27,7 @@ export class NapCatLaanaAdapter {
         this.actions = {
             ...new LaanaMessageActionImpl(this.core, this).handler,
             ...new LaanaContactActionImpl(this.core, this).handler,
+            ...new LaanaGroupActionImpl(this.core, this).handler,
         };
         this.configLoader = new LaanaConfigLoader(this.core, this.pathWrapper.configPath);
 

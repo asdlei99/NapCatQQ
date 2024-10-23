@@ -7,6 +7,7 @@ import {
     LaanaFile,
     SetGroupAdminPing_Operation,
 } from '@laana-proto/def';
+import { LaanaActionHandler } from '@/laana/action/index';
 
 export class LaanaGroupActionImpl {
     constructor(
@@ -14,11 +15,80 @@ export class LaanaGroupActionImpl {
         public laana: NapCatLaanaAdapter,
     ) {}
 
+    handler: LaanaActionHandler = {
+        getGroupMemberUins: async ({ groupCode }) => ({
+            memberUins: await this.getGroupMemberUins(groupCode),
+        }),
+
+        getGroupMemberInfo: async ({ groupCode, memberUin }) => ({
+            member: await this.getGroupMemberInfo(groupCode, memberUin),
+        }),
+
+        setGroupName: async ({ groupCode, name }) => {
+            await this.setGroupName(groupCode, name);
+            return { success: true };
+        },
+
+        setGroupAvatar: async ({ groupCode, avatar }) => ({
+            avatarCacheId: await this.setGroupAvatar(groupCode, avatar!),
+        }),
+
+        setGroupAdmin: async ({ groupCode, memberUin, operation }) => {
+            await this.setGroupAdmin(groupCode, memberUin, operation);
+            return { success: true };
+        },
+
+        setGroupMemberCard: async ({ groupCode, memberUin, card }) => {
+            await this.setGroupMemberCardName(groupCode, memberUin, card);
+            return { success: true };
+        },
+
+        setGroupMemberShutUp: async ({ groupCode, memberUin, operation }) => {
+            if (operation.oneofKind === 'lift') {
+                if (operation.lift) {
+                    await this.liftGroupMemberShutUp(groupCode, memberUin);
+                }
+            } else if (operation.oneofKind === 'duration') {
+                await this.setGroupMemberShutUp(groupCode, memberUin, operation.duration);
+            }
+            return { success: true };
+        },
+
+        setGroupShutUpAll: async ({ groupCode, lift }) => {
+            await this.setGroupShutUpAll(groupCode, lift);
+            return { success: true };
+        },
+
+        setGroupMemberSpecialTitle: async ({ groupCode, memberUin, title }) => {
+            await this.setGroupSpecialTitle(groupCode, memberUin, title);
+            return { success: true };
+        },
+
+        kickGroupMember: async ({ groupCode, memberUin }) => {
+            await this.kickGroupMember(groupCode, memberUin);
+            return { success: true };
+        },
+
+        quitGroup: async ({ groupCode }) => {
+            await this.quitGroup(groupCode);
+            return { success: true };
+        },
+    };
+
+    /**
+     * Get all the member uins in a group.
+     * @param groupCode
+     */
     async getGroupMemberUins(groupCode: string) {
         return Array.from((await this.core.apis.GroupApi.getGroupMembersV2(groupCode)).values())
             .map(value => value.uin);
     }
 
+    /**
+     * Get group info.
+     * @param groupCode Group code.
+     * @param uin Uin of the member.
+     */
     async getGroupMemberInfo(groupCode: string, uin: string): Promise<LaanaUserEntity> {
         const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
         if (!uid) {
@@ -140,6 +210,20 @@ export class LaanaGroupActionImpl {
      */
     async setGroupShutUpAll(groupCode: string, lift: boolean) {
         return await this.core.apis.GroupApi.banGroup(groupCode, !lift);
+    }
+
+    /**
+     * Set group special title.
+     * @param groupCode Group code.
+     * @param uin Uin of the member.
+     * @param specialTitle The special title. If empty, will be unset.
+     */
+    async setGroupSpecialTitle(groupCode: string, uin: string, specialTitle: string) {
+        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
+        if (!uid) {
+            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
+        }
+        return await this.core.apis.PacketApi.sendSetSpecialTittlePacket(groupCode, uid, specialTitle);
     }
 
     /**
