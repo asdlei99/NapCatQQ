@@ -4,7 +4,7 @@ module.exports = {
         'es2021': true,
         'node': true
     },
-    'ignorePatterns': ['src/core/proto/', 'src/laana*/types/'],
+    'ignorePatterns': ['src/core/proto/'],
     'extends': [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended'
