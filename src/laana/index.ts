@@ -9,11 +9,13 @@ import { LaanaNetworkManager } from './network';
 import { LaanaWsServerAdapter } from './network/ws-server';
 import { LaanaContactActionImpl } from '@/laana/action/contact';
 import { LaanaGroupActionImpl } from '@/laana/action/group';
+import { LaanaUserUtils } from '@/laana/utils/user';
 
 export class NapCatLaanaAdapter {
     utils = {
         msg: new LaanaMessageUtils(this.core, this),
         file: new LaanaFileUtils(this.core, this),
+        user: new LaanaUserUtils(this.core, this),
     };
     actions: LaanaActionHandler;
     configLoader: LaanaConfigLoader;

@@ -94,10 +94,7 @@ export class LaanaGroupActionImpl {
      * @param uin Uin of the member.
      */
     async getGroupMemberInfo(groupCode: string, uin: string): Promise<LaanaUserEntity> {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 信息失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         const userInfo = await this.core.apis.GroupApi.getGroupMember(groupCode, uid);
         if (!userInfo) {
             throw new Error(`获取 ${uin} 信息失败`);
@@ -181,10 +178,7 @@ export class LaanaGroupActionImpl {
      * @param operation Set or unset.
      */
     async setGroupAdmin(groupCode: string, uin: string, operation: SetGroupAdminPing_Operation) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         return await this.core.apis.GroupApi.setMemberRole(
             groupCode,
             uid,
@@ -199,10 +193,7 @@ export class LaanaGroupActionImpl {
      * @param newCardName New card name.
      */
     async setGroupMemberCardName(groupCode: string, uin: string, newCardName: string) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         return await this.core.apis.GroupApi.setMemberCard(groupCode, uid, newCardName);
     }
 
@@ -213,10 +204,7 @@ export class LaanaGroupActionImpl {
      * @param specialTitle The special title. If empty, will be unset.
      */
     async setGroupSpecialTitle(groupCode: string, uin: string, specialTitle: string) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         return await this.core.apis.PacketApi.sendSetSpecialTittlePacket(groupCode, uid, specialTitle);
     }
 
@@ -227,10 +215,7 @@ export class LaanaGroupActionImpl {
      * @param duration Duration of the shut-up.
      */
     async setGroupMemberShutUp(groupCode: string, uin: string, duration: number) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         return await this.core.apis.GroupApi.banMember(groupCode, [{ uid, timeStamp: duration }]);
     }
 
@@ -240,10 +225,7 @@ export class LaanaGroupActionImpl {
      * @param uin Uin of the member.
      */
     async liftGroupMemberShutUp(groupCode: string, uin: string) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         return await this.core.apis.GroupApi.banMember(groupCode, [{ uid, timeStamp: 0 }]);
     }
 
@@ -262,10 +244,7 @@ export class LaanaGroupActionImpl {
      * @param uin Uin of the member.
      */
     async kickGroupMember(groupCode: string, uin: string) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         return await this.core.apis.GroupApi.kickMember(groupCode, [uid]);
     }
 

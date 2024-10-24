@@ -133,10 +133,7 @@ export class LaanaMessageUtils {
                             atMember.cardName || atMember.nick,
                         ));
                     } else {
-                        const uid = await this.core.apis.UserApi.getUidByUinV2(content.at.uin);
-                        if (!uid) {
-                            throw Error('查询用户 UID 失败');
-                        }
+                        const uid = await this.laana.utils.user.findUidByUinOrThrow(content.at.uin);
                         const info = await this.core.apis.UserApi.getUserDetailInfo(uid);
                         elements.push(at(
                             content.at.uin,
@@ -289,11 +286,8 @@ export class LaanaMessageUtils {
 
     async laanaPeerToRaw(peer: LaanaPeer): Promise<Peer> {
         const peerUid = peer.type === LaanaPeer_Type.BUDDY ?
-            await this.core.apis.UserApi.getUidByUinV2(peer.uin) :
+            await this.laana.utils.user.findUidByUinOrThrow(peer.uin) :
             peer.uin;
-        if (!peerUid) {
-            throw Error('查询用户 UID 失败');
-        }
         return {
             chatType: peer.type === LaanaPeer_Type.GROUP ? ChatType.KCHATTYPEGROUP : ChatType.KCHATTYPEC2C,
             guildId: '',

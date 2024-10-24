@@ -50,10 +50,7 @@ export class LaanaContactActionImpl {
      * @param uin Buddy uin.
      */
     async getBuddyInfo(uin: string): Promise<LaanaUserEntity> {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 信息失败`);
-        }
+        const uid = await this.laana.utils.user.findUidByUinOrThrow(uin);
         const userInfo = await this.core.apis.UserApi.getUserDetailInfo(uid);
         return {
             uin,
