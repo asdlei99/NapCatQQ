@@ -1,10 +1,10 @@
 import { GroupMemberRole, NapCatCore, Sex } from '@/core';
 import { NapCatLaanaAdapter } from '@/laana';
 import {
-    LaanaUserEntity,
-    LaanaUserEntity_Sex,
-    LaanaUserEntity_GroupRoleData_PermissionLevel as PermLevel,
     LaanaFile,
+    LaanaUserEntity,
+    LaanaUserEntity_GroupRoleData_PermissionLevel as PermLevel,
+    LaanaUserEntity_Sex,
     SetGroupAdminPing_Operation,
 } from '@laana-proto/def';
 import { LaanaActionHandler } from '@/laana/action/index';
@@ -22,6 +22,10 @@ export class LaanaGroupActionImpl {
 
         getGroupMemberInfo: async ({ groupCode, memberUin }) => ({
             member: await this.getGroupMemberInfo(groupCode, memberUin),
+        }),
+
+        getAllGroupMembersInfo: async ({ groupCode }) => ({
+            members: await this.getAllGroupMembersInfo(groupCode),
         }),
 
         setGroupName: async ({ groupCode, name }) => {
@@ -122,6 +126,32 @@ export class LaanaGroupActionImpl {
         };
     }
 
+    async getAllGroupMembersInfo(groupCode: string): Promise<LaanaUserEntity[]> {
+        return Array.from((await this.core.apis.GroupApi.getGroupMembersV2(groupCode)).values())
+            .map(value => ({
+                uin: value.uin,
+                nick: value.nick,
+                sex: value.sex === Sex.male ? LaanaUserEntity_Sex.MALE
+                    : value.sex === Sex.female ? LaanaUserEntity_Sex.FEMALE
+                        : LaanaUserEntity_Sex.UNKNOWN,
+                age: value.age,
+                qid: value.qid,
+                roleData: {
+                    oneofKind: 'groupRoleData',
+                    groupRoleData: {
+                        groupNick: value.cardName || undefined,
+                        permissionLevel: value.role === GroupMemberRole.normal ? PermLevel.NORMAL :
+                            value.role === GroupMemberRole.admin ? PermLevel.ADMIN :
+                                value.role === GroupMemberRole.owner ? PermLevel.OWNER :
+                                    PermLevel.FALLBACK,
+                        isRobot: value.isRobot,
+                        lastSpeakTime: BigInt(value.lastSpeakTime), // TODO: multiple by 1000?
+                        shutUpTime: BigInt(value.shutUpTime), // TODO: multiple by 1000?
+                    }
+                }
+            }));
+    }
+
     /**
      * Get group info.
      * @param groupCode Group code.
@@ -177,6 +207,20 @@ export class LaanaGroupActionImpl {
     }
 
     /**
+     * Set group special title.
+     * @param groupCode Group code.
+     * @param uin Uin of the member.
+     * @param specialTitle The special title. If empty, will be unset.
+     */
+    async setGroupSpecialTitle(groupCode: string, uin: string, specialTitle: string) {
+        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
+        if (!uid) {
+            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
+        }
+        return await this.core.apis.PacketApi.sendSetSpecialTittlePacket(groupCode, uid, specialTitle);
+    }
+
+    /**
      * Shut up a group member.
      * @param groupCode Group code.
      * @param uin Uin of the member.
@@ -210,20 +254,6 @@ export class LaanaGroupActionImpl {
      */
     async setGroupShutUpAll(groupCode: string, lift: boolean) {
         return await this.core.apis.GroupApi.banGroup(groupCode, !lift);
-    }
-
-    /**
-     * Set group special title.
-     * @param groupCode Group code.
-     * @param uin Uin of the member.
-     * @param specialTitle The special title. If empty, will be unset.
-     */
-    async setGroupSpecialTitle(groupCode: string, uin: string, specialTitle: string) {
-        const uid = await this.core.apis.UserApi.getUidByUinV2(uin);
-        if (!uid) {
-            throw new Error(`获取 ${uin} 对应 ${uid} 失败`);
-        }
-        return await this.core.apis.PacketApi.sendSetSpecialTittlePacket(groupCode, uid, specialTitle);
     }
 
     /**
